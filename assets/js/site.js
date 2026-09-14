@@ -35,145 +35,7 @@
     pin: svg('<path d="M12 21s-7-6.2-7-12a7 7 0 0 1 14 0c0 5.8-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/>'),
     moon: svg('<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>'),
     trophy: svg('<path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4zM17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/>'),
-    calendarPlus: svg('<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M12 13v6M9 16h6"/>'),
-    download: svg('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>'),
-    chevronDown: svg('<path d="M6 9l6 6 6-6"/>'),
   };
-
-  // -------------------------------------------------------- calendar utils
-
-  function formatUtcIcalDate(ms) {
-    const d = new Date(ms);
-    return d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
-  }
-
-  function formatLocalIcalDate(ms) {
-    const parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: TIME_ZONE,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hourCycle: 'h23'
-    }).formatToParts(ms);
-
-    const map = {};
-    parts.forEach(p => { map[p.type] = p.value; });
-    return `${map.year}${map.month}${map.day}T${map.hour}${map.minute}${map.second}`;
-  }
-
-  const VTIMEZONE_VANCOUVER = [
-    'BEGIN:VTIMEZONE',
-    'TZID:America/Vancouver',
-    'X-LIC-LOCATION:America/Vancouver',
-    'BEGIN:DAYLIGHT',
-    'TZOFFSETFROM:-0800',
-    'TZOFFSETTO:-0700',
-    'TZNAME:PDT',
-    'DTSTART:19700308T020000',
-    'RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU',
-    'END:DAYLIGHT',
-    'BEGIN:STANDARD',
-    'TZOFFSETFROM:-0700',
-    'TZOFFSETTO:-0800',
-    'TZNAME:PST',
-    'DTSTART:19701101T020000',
-    'RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU',
-    'END:STANDARD',
-    'END:VTIMEZONE'
-  ].join('\r\n');
-
-  function gameTitle(game) {
-    return `${game.home} vs ${game.away}`;
-  }
-
-  function gameDetails(game) {
-    const round = game.round ? `Round ${game.round}` : '';
-    const div = game.division ? ` · ${game.division}` : '';
-    const field = game.field ? `\nField: ${game.field}` : '';
-    return `Brazuca FC ${round}${div}${field}\nhttps://brazucafc.ca/schedule.html`;
-  }
-
-  function googleCalendarUrl(game) {
-    const startStr = formatUtcIcalDate(game.start);
-    const endStr = formatUtcIcalDate(game.start + 90 * 60 * 1000);
-    const params = new URLSearchParams({
-      action: 'TEMPLATE',
-      text: gameTitle(game),
-      dates: `${startStr}/${endStr}`,
-      details: gameDetails(game),
-      location: game.field || '',
-      ctz: TIME_ZONE
-    });
-    return `https://calendar.google.com/calendar/render?${params.toString()}`;
-  }
-
-  function buildIcsDataUrl(gameOrGames) {
-    const games = Array.isArray(gameOrGames) ? gameOrGames : [gameOrGames];
-    const nowStr = formatUtcIcalDate(Date.now());
-
-    const events = games.map(game => {
-      const startLocal = formatLocalIcalDate(game.start);
-      const endLocal = formatLocalIcalDate(game.start + 90 * 60 * 1000);
-      const title = gameTitle(game);
-      const details = gameDetails(game);
-      const location = game.field || '';
-      const uid = `game-${game.round || '1'}-${game.start}@brazucafc.ca`;
-
-      return [
-        'BEGIN:VEVENT',
-        `UID:${uid}`,
-        `DTSTAMP:${nowStr}`,
-        `DTSTART;TZID=America/Vancouver:${startLocal}`,
-        `DTEND;TZID=America/Vancouver:${endLocal}`,
-        `SUMMARY:${title}`,
-        `DESCRIPTION:${details.replace(/\n/g, '\\n')}`,
-        `LOCATION:${location}`,
-        'END:VEVENT'
-      ].join('\r\n');
-    }).join('\r\n');
-
-    const ics = [
-      'BEGIN:VCALENDAR',
-      'VERSION:2.0',
-      'PRODID:-//Brazuca FC//EN',
-      'CALSCALE:GREGORIAN',
-      'METHOD:PUBLISH',
-      VTIMEZONE_VANCOUVER,
-      events,
-      'END:VCALENDAR'
-    ].join('\r\n');
-
-    return 'data:text/calendar;charset=utf8,' + encodeURIComponent(ics);
-  }
-
-  function calendarMenu(game, options = {}) {
-    const { compact = false, label = t('js.addToCalendar') } = options;
-    const filename = game.round
-      ? `BrazucaFC-Round${game.round}.ics`
-      : `BrazucaFC-Match.ics`;
-    const googleUrl = googleCalendarUrl(game);
-    const icsUrl = buildIcsDataUrl(game);
-
-    return `
-      <details class="calendar-menu${compact ? ' calendar-menu--compact' : ''}">
-        <summary class="calendar-menu-btn" aria-label="${esc(label)}">
-          ${ICONS.calendarPlus}
-          <span class="calendar-btn-label">${esc(label)}</span>
-          ${ICONS.chevronDown}
-        </summary>
-        <div class="calendar-dropdown">
-          <a href="${googleUrl}" target="_blank" rel="noopener">
-            ${ICONS.calendar} Google Calendar
-          </a>
-          <a href="${icsUrl}" download="${filename}">
-            ${ICONS.download} Apple / iCal (.ics)
-          </a>
-        </div>
-      </details>`;
-  }
 
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
@@ -265,17 +127,10 @@
     return `<div class="team${us ? ' team--us' : ''}">${badge}<span class="team-name">${esc(name)}</span><span class="team-side">${side}</span></div>`;
   }
 
-  function dataNote(data, upcomingGames = []) {
+  function dataNote(data) {
     const fmt = getFmt();
     const updated = data.updatedAt ? ` · ${t('js.updated')} ${esc(fmt.stamp.format(Date.parse(data.updatedAt)))}` : '';
-    const seasonBtn = upcomingGames.length > 0
-      ? `<div class="season-calendar-export">
-          <a class="btn-season-cal" href="${buildIcsDataUrl(upcomingGames)}" download="BrazucaFC-Season-2026-27.ics">
-            ${ICONS.calendarPlus} ${t('js.exportSeason')}
-          </a>
-         </div>`
-      : '';
-    return `${seasonBtn}<p class="data-note">${t('js.fromLeague', { url: LEAGUE_URL })}${updated}</p>`;
+    return `<p class="data-note">${t('js.fromLeague', { url: LEAGUE_URL })}${updated}</p>`;
   }
 
   function errorState(message) {
@@ -301,10 +156,7 @@
           <li>${ICONS.clock}<span>${esc(fmt.time.format(game.start))}</span></li>
           <li>${ICONS.pin}<span>${esc(game.field)}</span></li>
         </ul>
-        <div class="match-footer">
-          <p class="match-countdown">${esc(kickoffLabel(game, now))}</p>
-          ${!live ? calendarMenu(game) : ''}
-        </div>
+        <p class="match-countdown">${esc(kickoffLabel(game, now))}</p>
       </article>`;
   }
 
