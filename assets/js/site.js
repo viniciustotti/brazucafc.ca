@@ -35,7 +35,145 @@
     pin: svg('<path d="M12 21s-7-6.2-7-12a7 7 0 0 1 14 0c0 5.8-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/>'),
     moon: svg('<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>'),
     trophy: svg('<path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4zM17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/>'),
+    calendarPlus: svg('<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M12 13v6M9 16h6"/>'),
+    download: svg('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>'),
+    chevronDown: svg('<path d="M6 9l6 6 6-6"/>'),
   };
+
+  // -------------------------------------------------------- calendar utils
+
+  function formatUtcIcalDate(ms) {
+    const d = new Date(ms);
+    return d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  }
+
+  function formatLocalIcalDate(ms) {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: TIME_ZONE,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23'
+    }).formatToParts(ms);
+
+    const map = {};
+    parts.forEach(p => { map[p.type] = p.value; });
+    return `${map.year}${map.month}${map.day}T${map.hour}${map.minute}${map.second}`;
+  }
+
+  const VTIMEZONE_VANCOUVER = [
+    'BEGIN:VTIMEZONE',
+    'TZID:America/Vancouver',
+    'X-LIC-LOCATION:America/Vancouver',
+    'BEGIN:DAYLIGHT',
+    'TZOFFSETFROM:-0800',
+    'TZOFFSETTO:-0700',
+    'TZNAME:PDT',
+    'DTSTART:19700308T020000',
+    'RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU',
+    'END:DAYLIGHT',
+    'BEGIN:STANDARD',
+    'TZOFFSETFROM:-0700',
+    'TZOFFSETTO:-0800',
+    'TZNAME:PST',
+    'DTSTART:19701101T020000',
+    'RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU',
+    'END:STANDARD',
+    'END:VTIMEZONE'
+  ].join('\r\n');
+
+  function gameTitle(game) {
+    return `${game.home} vs ${game.away}`;
+  }
+
+  function gameDetails(game) {
+    const round = game.round ? `Round ${game.round}` : '';
+    const div = game.division ? ` · ${game.division}` : '';
+    const field = game.field ? `\nField: ${game.field}` : '';
+    return `Brazuca FC ${round}${div}${field}\nhttps://brazucafc.ca/schedule.html`;
+  }
+
+  function googleCalendarUrl(game) {
+    const startStr = formatUtcIcalDate(game.start);
+    const endStr = formatUtcIcalDate(game.start + 90 * 60 * 1000);
+    const params = new URLSearchParams({
+      action: 'TEMPLATE',
+      text: gameTitle(game),
+      dates: `${startStr}/${endStr}`,
+      details: gameDetails(game),
+      location: game.field || '',
+      ctz: TIME_ZONE
+    });
+    return `https://calendar.google.com/calendar/render?${params.toString()}`;
+  }
+
+  function buildIcsDataUrl(gameOrGames) {
+    const games = Array.isArray(gameOrGames) ? gameOrGames : [gameOrGames];
+    const nowStr = formatUtcIcalDate(Date.now());
+
+    const events = games.map(game => {
+      const startLocal = formatLocalIcalDate(game.start);
+      const endLocal = formatLocalIcalDate(game.start + 90 * 60 * 1000);
+      const title = gameTitle(game);
+      const details = gameDetails(game);
+      const location = game.field || '';
+      const uid = `game-${game.round || '1'}-${game.start}@brazucafc.ca`;
+
+      return [
+        'BEGIN:VEVENT',
+        `UID:${uid}`,
+        `DTSTAMP:${nowStr}`,
+        `DTSTART;TZID=America/Vancouver:${startLocal}`,
+        `DTEND;TZID=America/Vancouver:${endLocal}`,
+        `SUMMARY:${title}`,
+        `DESCRIPTION:${details.replace(/\n/g, '\\n')}`,
+        `LOCATION:${location}`,
+        'END:VEVENT'
+      ].join('\r\n');
+    }).join('\r\n');
+
+    const ics = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//Brazuca FC//EN',
+      'CALSCALE:GREGORIAN',
+      'METHOD:PUBLISH',
+      VTIMEZONE_VANCOUVER,
+      events,
+      'END:VCALENDAR'
+    ].join('\r\n');
+
+    return 'data:text/calendar;charset=utf8,' + encodeURIComponent(ics);
+  }
+
+  function calendarMenu(game, options = {}) {
+    const { compact = false, label = t('js.addToCalendar') } = options;
+    const filename = game.round
+      ? `BrazucaFC-Round${game.round}.ics`
+      : `BrazucaFC-Match.ics`;
+    const googleUrl = googleCalendarUrl(game);
+    const icsUrl = buildIcsDataUrl(game);
+
+    return `
+      <details class="calendar-menu${compact ? ' calendar-menu--compact' : ''}">
+        <summary class="calendar-menu-btn" aria-label="${esc(label)}">
+          ${ICONS.calendarPlus}
+          <span class="calendar-btn-label">${esc(label)}</span>
+          ${ICONS.chevronDown}
+        </summary>
+        <div class="calendar-dropdown">
+          <a href="${googleUrl}" target="_blank" rel="noopener">
+            ${ICONS.calendar} Google Calendar
+          </a>
+          <a href="${icsUrl}" download="${filename}">
+            ${ICONS.download} Apple / iCal (.ics)
+          </a>
+        </div>
+      </details>`;
+  }
 
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
@@ -58,19 +196,29 @@
 
   // ------------------------------------------------------------ dates
 
-  const formatter = options => new Intl.DateTimeFormat('en-US', { timeZone: TIME_ZONE, ...options });
-  const fmt = {
-    weekday: formatter({ weekday: 'short' }),
-    dayMonth: formatter({ month: 'short', day: 'numeric' }),
-    time: formatter({ hour: 'numeric', minute: '2-digit' }),
-    long: formatter({ weekday: 'long', month: 'long', day: 'numeric' }),
-    short: formatter({ weekday: 'short', month: 'short', day: 'numeric' }),
-    stamp: formatter({ month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }),
-  };
-  const dayKey = new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' });
-  const relative = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+  function getLocale() {
+    return window.I18N?.getLang() === 'pt' ? 'pt-BR' : 'en-US';
+  }
+
+  function getFmt() {
+    const loc = getLocale();
+    const f = options => new Intl.DateTimeFormat(loc, { timeZone: TIME_ZONE, ...options });
+    return {
+      weekday: f({ weekday: 'short' }),
+      dayMonth: f({ month: 'short', day: 'numeric' }),
+      time: f({ hour: 'numeric', minute: '2-digit' }),
+      long: f({ weekday: 'long', month: 'long', day: 'numeric' }),
+      short: f({ weekday: 'short', month: 'short', day: 'numeric' }),
+      stamp: f({ month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }),
+    };
+  }
+
+  function t(key, vars) {
+    return window.I18N ? window.I18N.t(key, vars) : key;
+  }
 
   function calendarDaysUntil(fromMs, toMs) {
+    const dayKey = new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' });
     const [a, b] = [fromMs, toMs].map(ms => {
       const [y, m, d] = dayKey.format(ms).split('-').map(Number);
       return Date.UTC(y, m - 1, d);
@@ -79,14 +227,15 @@
   }
 
   function kickoffLabel(game, now) {
-    if (now >= game.start) return 'Happening now — vamo Brazuca!';
+    if (now >= game.start) return t('js.happeningNow');
     const days = calendarDaysUntil(now, game.start);
     if (days === 0) {
       const minutes = Math.round((game.start - now) / 60_000);
-      return `Today · kick-off ${minutes < 60 ? relative.format(minutes, 'minute') : relative.format(Math.round(minutes / 60), 'hour')}`;
+      const rel = new Intl.RelativeTimeFormat(getLocale().split('-')[0], { numeric: 'auto' });
+      return `${t('js.today')} · kick-off ${minutes < 60 ? rel.format(minutes, 'minute') : rel.format(Math.round(minutes / 60), 'hour')}`;
     }
-    if (days === 1) return 'Tomorrow';
-    return `In ${days} days`;
+    if (days === 1) return t('js.tomorrow');
+    return t('js.inDays', { days });
   }
 
   // --------------------------------------------------------- schedule
@@ -101,7 +250,7 @@
 
   const isOver = (game, now) => game.result !== null || game.start + MATCH_WINDOW_MS <= now;
   const findNext = (games, now) => games.find(game => !isOver(game, now)) ?? null;
-  const byeMessage = game => BYE_MESSAGES[(game.round - 1) % BYE_MESSAGES.length];
+  const byeMessage = game => t(`bye.${(game.round - 1) % BYE_MESSAGES.length}`);
 
   function initials(name) {
     return name.split(/\s+/).filter(word => word && word.toUpperCase() !== 'FC')
@@ -116,9 +265,17 @@
     return `<div class="team${us ? ' team--us' : ''}">${badge}<span class="team-name">${esc(name)}</span><span class="team-side">${side}</span></div>`;
   }
 
-  function dataNote(data) {
-    const updated = data.updatedAt ? ` · updated ${esc(fmt.stamp.format(Date.parse(data.updatedAt)))}` : '';
-    return `<p class="data-note">From the <a href="${LEAGUE_URL}" target="_blank" rel="noopener">Fraser Valley Soccer League</a>${updated}</p>`;
+  function dataNote(data, upcomingGames = []) {
+    const fmt = getFmt();
+    const updated = data.updatedAt ? ` · ${t('js.updated')} ${esc(fmt.stamp.format(Date.parse(data.updatedAt)))}` : '';
+    const seasonBtn = upcomingGames.length > 0
+      ? `<div class="season-calendar-export">
+          <a class="btn-season-cal" href="${buildIcsDataUrl(upcomingGames)}" download="BrazucaFC-Season-2026-27.ics">
+            ${ICONS.calendarPlus} ${t('js.exportSeason')}
+          </a>
+         </div>`
+      : '';
+    return `${seasonBtn}<p class="data-note">${t('js.fromLeague', { url: LEAGUE_URL })}${updated}</p>`;
   }
 
   function errorState(message) {
@@ -127,41 +284,46 @@
 
   function matchCard(game, now) {
     const live = now >= game.start;
+    const fmt = getFmt();
     return `
       <article class="card match-card">
         <div class="match-meta">
-          <span class="pill ${live ? 'pill--green' : 'pill--yellow'}">${live ? 'Live now' : 'Next match'}</span>
-          <span class="match-round">Round ${game.round} · ${esc(game.division)}</span>
+          <span class="pill ${live ? 'pill--green' : 'pill--yellow'}">${live ? t('js.liveNow') : t('js.nextMatch')}</span>
+          <span class="match-round">${t('js.round', { round: game.round })} · ${esc(game.division)}</span>
         </div>
         <div class="match-teams">
-          ${teamBlock(game.home, 'Home')}
+          ${teamBlock(game.home, t('js.home'))}
           <span class="match-vs">VS</span>
-          ${teamBlock(game.away, 'Away')}
+          ${teamBlock(game.away, t('js.away'))}
         </div>
         <ul class="match-details">
           <li>${ICONS.calendar}<span>${esc(fmt.long.format(game.start))}</span></li>
           <li>${ICONS.clock}<span>${esc(fmt.time.format(game.start))}</span></li>
           <li>${ICONS.pin}<span>${esc(game.field)}</span></li>
         </ul>
-        <p class="match-countdown">${esc(kickoffLabel(game, now))}</p>
+        <div class="match-footer">
+          <p class="match-countdown">${esc(kickoffLabel(game, now))}</p>
+          ${!live ? calendarMenu(game) : ''}
+        </div>
       </article>`;
   }
 
   function byeCard(bye, after) {
+    const fmt = getFmt();
     return `
       <article class="card match-card">
         <div class="match-meta">
-          <span class="pill pill--yellow">Bye week</span>
-          <span class="match-round">Round ${bye.round} · ${esc(fmt.long.format(bye.start))}</span>
+          <span class="pill pill--yellow">${t('js.byeWeek')}</span>
+          <span class="match-round">${t('js.round', { round: bye.round })} · ${esc(fmt.long.format(bye.start))}</span>
         </div>
         <div class="bye">
           <span class="bye-icon">${ICONS.moon}</span>
-          <h3 class="bye-title">No game this round</h3>
+          <h3 class="bye-title">${t('js.noGameRound')}</h3>
           <p class="bye-text">${esc(byeMessage(bye))}</p>
         </div>
         ${after ? `
         <div class="match-after">
-          <span>Back in action</span>
+          <span>${t('js.backInAction')}</span>
           <strong>${esc(fmt.short.format(after.start))} · ${after.isHome ? 'vs' : '@'} ${esc(after.opponent)}</strong>
         </div>` : ''}
       </article>`;
@@ -172,8 +334,8 @@
       <article class="card match-card">
         <div class="bye">
           <span class="bye-icon">${ICONS.trophy}</span>
-          <h3 class="bye-title">That’s a wrap</h3>
-          <p class="bye-text">The regular season is done. Thanks for following the Brazucas — next season’s fixtures land here as soon as the league publishes them.</p>
+          <h3 class="bye-title">${t('js.seasonWrap')}</h3>
+          <p class="bye-text">${t('js.seasonWrapText')}</p>
         </div>
       </article>`;
   }
@@ -191,7 +353,7 @@
       el.innerHTML = html + dataNote(schedule);
     } catch (err) {
       console.error(err);
-      el.innerHTML = errorState('We couldn’t load the next match right now.');
+      el.innerHTML = errorState(t('js.errNextMatch'));
     }
   }
 
@@ -199,8 +361,14 @@
     const compact = el.dataset.standings === 'compact';
     const columns = compact ? ['gp', 'gd', 'pts'] : ['gp', 'w', 'd', 'l', 'gf', 'ga', 'gd', 'pts'];
     const headings = {
-      gp: ['GP', 'Games played'], w: ['W', 'Wins'], d: ['D', 'Draws'], l: ['L', 'Losses'],
-      gf: ['GF', 'Goals for'], ga: ['GA', 'Goals against'], gd: ['GD', 'Goal difference'], pts: ['PTS', 'Points'],
+      gp: [t('table.gp.abbr'), t('table.gp.title')],
+      w: [t('table.w.abbr'), t('table.w.title')],
+      d: [t('table.d.abbr'), t('table.d.title')],
+      l: [t('table.l.abbr'), t('table.l.title')],
+      gf: [t('table.gf.abbr'), t('table.gf.title')],
+      ga: [t('table.ga.abbr'), t('table.ga.title')],
+      gd: [t('table.gd.abbr'), t('table.gd.title')],
+      pts: [t('table.pts.abbr'), t('table.pts.title')],
     };
     try {
       const data = await loadJson('data/standings.json');
@@ -212,7 +380,7 @@
             <thead>
               <tr>
                 <th scope="col"><abbr title="Position">#</abbr></th>
-                <th scope="col" class="col-team">Team</th>
+                <th scope="col" class="col-team">${t('js.teamCol')}</th>
                 ${columns.map(c => `<th scope="col"><abbr title="${headings[c][1]}">${headings[c][0]}</abbr></th>`).join('')}
               </tr>
             </thead>
@@ -226,16 +394,17 @@
             </tbody>
           </table>
         </div>
-        ${played ? '' : '<p class="data-note">No results yet — the table fills in once the first scores are posted.</p>'}
+        ${played ? '' : `<p class="data-note">${t('js.noResultsYet')}</p>`}
         ${compact ? '' : dataNote(data)}`;
     } catch (err) {
       console.error(err);
-      el.innerHTML = errorState('We couldn’t load the standings right now.');
+      el.innerHTML = errorState(t('js.errStandings'));
     }
   }
 
   function fixtureRow(game, now, next) {
     const over = isOver(game, now);
+    const fmt = getFmt();
     const classes = ['fixture', game.isBye && 'is-bye', over && 'is-past', game === next && 'is-next'].filter(Boolean).join(' ');
     const date = `
       <div class="fixture-date">
@@ -249,31 +418,32 @@
         <li class="${classes}">
           ${date}
           <div class="fixture-body">
-            <span class="fixture-round">Round ${game.round} · Bye</span>
-            <span class="fixture-teams">Bye week</span>
+            <span class="fixture-round">${t('js.round', { round: game.round })} · ${t('js.byeWeek')}</span>
+            <span class="fixture-teams">${t('js.byeWeek')}</span>
             <span class="fixture-field">${esc(byeMessage(game))}</span>
           </div>
-          <div class="fixture-side"><span class="pill">Rest</span></div>
+          <div class="fixture-side"><span class="pill">${t('js.rest')}</span></div>
         </li>`;
     }
 
     const name = team => (team === TEAM ? `<b>${esc(team)}</b>` : esc(team));
     let side;
     if (game.result) {
-      side = `<span class="result result--${game.result}"><span class="result-badge" aria-label="${{ W: 'Win', D: 'Draw', L: 'Loss' }[game.result]}">${game.result}</span>${game.homeScore}–${game.awayScore}</span>`;
+      const resultLabel = { W: t('js.win'), D: t('js.draw'), L: t('js.loss') }[game.result] || game.result;
+      side = `<span class="result result--${game.result}"><span class="result-badge" aria-label="${esc(resultLabel)}">${game.result}</span>${game.homeScore}–${game.awayScore}</span>`;
     } else if (over) {
-      side = '<span class="pill">Result pending</span>';
+      side = `<span class="pill">${t('js.resultPending')}</span>`;
     } else if (game === next) {
-      side = `<span class="pill pill--yellow">${now >= game.start ? 'Live now' : 'Next up'}</span>`;
+      side = `<span class="pill pill--yellow">${now >= game.start ? t('js.liveNow') : t('js.nextUp')}</span>`;
     } else {
-      side = `<span class="pill">${game.isHome ? 'Home' : 'Away'}</span>`;
+      side = `<span class="pill">${game.isHome ? t('js.home') : t('js.away')}</span>`;
     }
 
     return `
       <li class="${classes}">
         ${date}
         <div class="fixture-body">
-          <span class="fixture-round">Round ${game.round} · ${game.isHome ? 'Home' : 'Away'}</span>
+          <span class="fixture-round">${t('js.round', { round: game.round })} · ${game.isHome ? t('js.home') : t('js.away')}</span>
           <span class="fixture-teams">${name(game.home)}<em>vs</em>${name(game.away)}</span>
           <span class="fixture-field">${ICONS.pin}${esc(game.field)}</span>
         </div>
@@ -286,10 +456,10 @@
     const played = matches.filter(g => g.result);
     const count = r => played.filter(g => g.result === r).length;
     return [
-      [matches.length, 'Matches'],
-      [matches.filter(g => g.isHome).length, 'At home'],
-      [games.length - matches.length, 'Bye weeks'],
-      [played.length ? `${count('W')}-${count('D')}-${count('L')}` : '—', 'W-D-L'],
+      [matches.length, t('js.matches')],
+      [matches.filter(g => g.isHome).length, t('js.atHome')],
+      [games.length - matches.length, t('js.byeWeeks')],
+      [played.length ? `${count('W')}-${count('D')}-${count('L')}` : '—', t('js.wdl')],
     ].map(([value, label]) => `<div class="stat"><strong>${esc(value)}</strong><span>${label}</span></div>`).join('');
   }
 
@@ -307,9 +477,9 @@
         results: game => !game.isBye && isOver(game, now),
       };
       const empty = {
-        all: 'No fixtures published yet.',
-        upcoming: 'No more fixtures this season.',
-        results: 'No results yet — the season is just getting started.',
+        all: t('js.emptyAll'),
+        upcoming: t('js.emptyUpcoming'),
+        results: t('js.emptyResults'),
       };
       const draw = filter => {
         const shown = games.filter(filters[filter]);
@@ -327,7 +497,7 @@
       if (note) note.innerHTML = dataNote(schedule);
     } catch (err) {
       console.error(err);
-      list.innerHTML = `<li>${errorState('We couldn’t load the schedule right now.')}</li>`;
+      list.innerHTML = `<li>${errorState(t('js.errSchedule'))}</li>`;
     }
   }
 
@@ -342,18 +512,20 @@
   }
 
   function playerCard(player, group) {
+    const roleText = t(`role.${group.role}`) || group.role;
+    const captainText = t('role.captain');
     return `
       <article class="player${player.photo ? ' has-photo' : ''}">
         <div class="player-photo${player.photo ? ' has-photo' : ''}">
-          ${player.photo ? `<img src="${esc(player.photo)}" alt="${esc(player.name)}, number ${player.number}" loading="lazy">` : ''}
+          ${player.photo ? `<img src="${esc(player.photo)}" alt="${esc(player.name)}, #${player.number}" loading="lazy">` : ''}
           <span class="portrait-fallback" aria-hidden="true">${player.number}</span>
-          ${player.captain ? '<span class="player-captain" title="Captain">C</span>' : ''}
+          ${player.captain ? `<span class="player-captain" title="${esc(captainText)}">C</span>` : ''}
         </div>
         <div class="player-info">
           <div>
             <h3 class="player-name">${esc(player.name)}</h3>
             ${player.aka ? `<span class="player-aka">${esc(player.aka)}</span>` : ''}
-            <span class="player-role">${player.captain ? 'Captain · ' : ''}${esc(group.role)}</span>
+            <span class="player-role">${player.captain ? `${esc(captainText)} · ` : ''}${esc(roleText)}</span>
           </div>
           <span class="player-number" aria-hidden="true">${player.number}</span>
         </div>
@@ -364,23 +536,31 @@
     try {
       const team = await loadJson('data/team.json');
       const { coach } = team;
+      const coachRoleText = t(`role.${coach.role}`) || coach.role;
+      const coachBioText = t('coach.bio') || coach.bio;
       el.innerHTML = `
         <article class="card coach-card">
-          ${portrait(coach, 'coach-photo', coach.name.charAt(0), `Coach ${coach.name}`)}
+          ${portrait(coach, 'coach-photo', coach.name.charAt(0), `${coachRoleText} ${coach.name}`)}
           <div>
-            <p class="eyebrow">${esc(coach.role)}</p>
+            <p class="eyebrow">${esc(coachRoleText)}</p>
             <h2 class="coach-name">${esc(coach.name)}</h2>
-            ${coach.bio ? `<p class="coach-text">${esc(coach.bio)}</p>` : ''}
+            ${coachBioText ? `<p class="coach-text">${esc(coachBioText)}</p>` : ''}
           </div>
         </article>
-        ${team.groups.map(group => `
+        ${team.groups.map(group => {
+          const groupTitleText = t(`group.${group.id}`) || group.title;
+          const countText = group.players.length === 1
+            ? t('js.playerCount', { count: 1 })
+            : t('js.playersCount', { count: group.players.length });
+          return `
           <section class="squad-group" aria-labelledby="group-${esc(group.id)}">
             <header class="squad-group-head">
-              <h2 id="group-${esc(group.id)}">${esc(group.title)}</h2>
-              <span class="squad-count">${group.players.length} ${group.players.length === 1 ? 'player' : 'players'}</span>
+              <h2 id="group-${esc(group.id)}">${esc(groupTitleText)}</h2>
+              <span class="squad-count">${esc(countText)}</span>
             </header>
             <div class="players">${group.players.map(p => playerCard(p, group)).join('')}</div>
-          </section>`).join('')}`;
+          </section>`;
+        }).join('')}`;
 
       // A missing photo file falls back to the number badge.
       $$('.has-photo img', el).forEach(img => img.addEventListener('error', () => {
@@ -390,7 +570,7 @@
       }, { once: true }));
     } catch (err) {
       console.error(err);
-      el.innerHTML = '<div class="empty-state">We couldn’t load the squad right now.</div>';
+      el.innerHTML = `<div class="empty-state">${esc(t('js.errSquad'))}</div>`;
     }
   }
 
@@ -408,7 +588,7 @@
               <h2 class="album-title" id="album-${esc(album.id)}">${esc(album.title)}</h2>
               ${album.description ? `<p class="section-lead">${esc(album.description)}</p>` : ''}
             </div>
-            <span class="pill">${album.photos.length} ${album.photos.length === 1 ? 'photo' : 'photos'}</span>
+            <span class="pill">${album.photos.length === 1 ? t('js.photoCount', { count: 1 }) : t('js.photosCount', { count: album.photos.length })}</span>
           </div>
           <div class="gallery-grid">
             ${album.photos.map((photo, i) => {
@@ -422,8 +602,8 @@
                 </figure>`;
             }).join('')}
             <div class="gallery-slot">
-              <strong>More moments coming</strong>
-              <span>Got a great shot from matchday? Send it to <a href="mailto:tech@brazucafc.ca">tech@brazucafc.ca</a>.</span>
+              <strong>${t('js.moreMoments')}</strong>
+              <span>${t('js.sendShot')}</span>
             </div>
           </div>
         </section>`).join('');
@@ -465,7 +645,7 @@
       });
     } catch (err) {
       console.error(err);
-      el.innerHTML = '<div class="empty-state">We couldn’t load the gallery right now.</div>';
+      el.innerHTML = `<div class="empty-state">${esc(t('js.errGallery'))}</div>`;
     }
   }
 
@@ -497,12 +677,18 @@
     });
   }
 
+  function renderAll() {
+    $$('[data-next-match]').forEach(renderNextMatch);
+    $$('[data-standings]').forEach(renderStandings);
+    $$('[data-schedule]').forEach(renderSchedule);
+    $$('[data-squad]').forEach(renderSquad);
+    $$('[data-gallery]').forEach(renderGallery);
+  }
+
   initNav();
   initImageFallbacks();
   $$('[data-year]').forEach(node => { node.textContent = new Date().getFullYear(); });
-  $$('[data-next-match]').forEach(renderNextMatch);
-  $$('[data-standings]').forEach(renderStandings);
-  $$('[data-schedule]').forEach(renderSchedule);
-  $$('[data-squad]').forEach(renderSquad);
-  $$('[data-gallery]').forEach(renderGallery);
+  renderAll();
+
+  window.addEventListener('langchange', renderAll);
 })();

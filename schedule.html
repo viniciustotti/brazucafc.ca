@@ -20,6 +20,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&amp;display=swap">
   <link rel="stylesheet" href="assets/css/site.css">
+  <script src="assets/js/i18n.js" defer></script>
   <script src="assets/js/site.js" defer></script>
   <script data-goatcounter="https://brazucafc.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
@@ -38,22 +39,27 @@
       </button>
       <nav id="site-nav" class="site-nav" aria-label="Main">
         <ul>
-          <li><a href="about.html">About Us</a></li>
-          <li><a href="team.html">Team</a></li>
-          <li><a href="schedule.html" aria-current="page">Schedule</a></li>
-          <li><a href="gallery.html">Gallery</a></li>
-          <li><a href="contact.html">Contact</a></li>
+          <li><a href="about.html" data-i18n="nav.about">About Us</a></li>
+          <li><a href="team.html" data-i18n="nav.team">Team</a></li>
+          <li><a href="schedule.html" aria-current="page" data-i18n="nav.schedule">Schedule</a></li>
+          <li><a href="gallery.html" data-i18n="nav.gallery">Gallery</a></li>
+          <li><a href="contact.html" data-i18n="nav.contact">Contact</a></li>
         </ul>
       </nav>
+      <div class="lang-switcher" role="group" aria-label="Language selector">
+        <button type="button" data-lang="en" aria-pressed="true">EN</button>
+        <span aria-hidden="true">|</span>
+        <button type="button" data-lang="pt" aria-pressed="false">PT</button>
+      </div>
     </div>
   </header>
 
   <main id="main">
     <section class="page-hero" aria-labelledby="page-title">
       <div class="container">
-        <p class="eyebrow">Schedule</p>
-        <h1 class="page-title" id="page-title">Fixtures &amp; <span>Table</span></h1>
-        <p class="page-lead">Winter Masters 2026/27 · Masters 3 (Fall). Fixtures, results and standings update automatically from the Fraser Valley Soccer League.</p>
+        <p class="eyebrow" data-i18n="schedule.eyebrow">Schedule</p>
+        <h1 class="page-title" id="page-title" data-i18n="schedule.title">Fixtures &amp; <span>Table</span></h1>
+        <p class="page-lead" data-i18n="schedule.lead">Winter Masters 2026/27 · Masters 3 (Fall). Fixtures, results and standings update automatically from the Fraser Valley Soccer League.</p>
       </div>
     </section>
     <div class="stripe" aria-hidden="true"><span></span><span></span><span></span></div>
@@ -62,7 +68,7 @@
       <div class="container grid-matchday">
         <div data-next-match aria-live="polite"><div class="card skeleton">Loading the next match…</div></div>
         <div class="card">
-          <h2 class="card-title">Season at a glance</h2>
+          <h2 class="card-title" data-i18n="schedule.summaryTitle">Season at a glance</h2>
           <div class="stats stats--4" data-season-summary></div>
         </div>
       </div>
@@ -72,13 +78,13 @@
       <div class="container">
         <div class="section-head">
           <div>
-            <p class="eyebrow">Every round</p>
-            <h2 class="section-title" id="fixtures-title">Full <span>Schedule</span></h2>
+            <p class="eyebrow" data-i18n="schedule.eyebrow">Every round</p>
+            <h2 class="section-title" id="fixtures-title" data-i18n="schedule.fullTitle">Full <span>Schedule</span></h2>
           </div>
           <div class="filter-bar" role="group" aria-label="Filter fixtures">
-            <button type="button" data-filter="all" aria-pressed="true">All</button>
-            <button type="button" data-filter="upcoming" aria-pressed="false">Upcoming</button>
-            <button type="button" data-filter="results" aria-pressed="false">Results</button>
+            <button type="button" data-filter="all" data-i18n="schedule.all" aria-pressed="true">All</button>
+            <button type="button" data-filter="upcoming" data-i18n="schedule.upcoming" aria-pressed="false">Upcoming</button>
+            <button type="button" data-filter="results" data-i18n="schedule.results" aria-pressed="false">Results</button>
           </div>
         </div>
         <ol class="fixtures" data-fixtures><li class="skeleton">Loading fixtures…</li></ol>
@@ -91,7 +97,7 @@
         <div class="section-head">
           <div>
             <p class="eyebrow">Masters 3 (Fall) · Pool A</p>
-            <h2 class="section-title" id="standings-title">League <span>Table</span></h2>
+            <h2 class="section-title" id="standings-title" data-i18n="table.title">League <span>Table</span></h2>
           </div>
         </div>
         <div class="card" data-standings="full"><p class="skeleton">Loading standings…</p></div>
@@ -106,21 +112,21 @@
         <img src="assets/img/crest-128.png" alt="" width="68" height="68">
         <div>
           <strong>Brazuca FC</strong>
-          <p>More than a team, we are family.<br>Brazilian roots. Canadian home.</p>
+          <p data-i18n="footer.moreThanTeam">More than a team, we are family.<br>Brazilian roots. Canadian home.</p>
         </div>
       </div>
       <div>
-        <h3>Club</h3>
+        <h3 data-i18n="footer.club">Club</h3>
         <ul>
-          <li><a href="about.html">About Us</a></li>
-          <li><a href="team.html">Team</a></li>
-          <li><a href="schedule.html">Schedule</a></li>
-          <li><a href="gallery.html">Gallery</a></li>
-          <li><a href="contact.html">Contact</a></li>
+          <li><a href="about.html" data-i18n="nav.about">About Us</a></li>
+          <li><a href="team.html" data-i18n="nav.team">Team</a></li>
+          <li><a href="schedule.html" data-i18n="nav.schedule">Schedule</a></li>
+          <li><a href="gallery.html" data-i18n="nav.gallery">Gallery</a></li>
+          <li><a href="contact.html" data-i18n="nav.contact">Contact</a></li>
         </ul>
       </div>
       <div>
-        <h3>Get in touch</h3>
+        <h3 data-i18n="footer.touch">Get in touch</h3>
         <ul>
           <li><a href="mailto:contact@brazucafc.ca">contact@brazucafc.ca</a></li>
           <li><a href="https://www.instagram.com/fc.brazucas/" target="_blank" rel="noopener">Instagram @fc.brazucas</a></li>
@@ -128,7 +134,7 @@
         </ul>
       </div>
       <div>
-        <h3>Sponsors</h3>
+        <h3 data-i18n="footer.sponsors">Sponsors</h3>
         <ul>
           <li><a href="https://buildlvl.ca/" target="_blank" rel="noopener">Build lvl Construction</a></li>
           <li><a href="https://lucaslimarealtor.com" target="_blank" rel="noopener">Lucas Lima PREC</a></li>
@@ -136,8 +142,8 @@
       </div>
     </div>
     <div class="container footer-base">
-      <span>&copy; <span data-year>2026</span> Brazuca FC. All rights reserved.</span>
-      <span lang="pt-BR">Uma só nação, um só coração. 🇧🇷🇨🇦</span>
+      <span>&copy; <span data-year>2026</span> Brazuca FC. <span data-i18n="footer.rights">All rights reserved.</span></span>
+      <span lang="pt-BR" data-i18n="footer.motto">Uma só nação, um só coração. 🇧🇷🇨🇦</span>
     </div>
   </footer>
 </body>
